@@ -15,7 +15,7 @@ N_MS_PRE_SYNC = 6;
 N_MS_POST_SYNC = 6;
 
 SUBJ = 'DW100';
-RAW_DATA_FOLDER = 'R:/NMLShare/raw_data/rodent';
+RAW_DATA_FOLDER = parameters('raw_data_folder');
 YYYY = 2023;
 MM = 8;
 DD = 9;
@@ -23,7 +23,8 @@ BLOCK = 1:3; % options for block
 SYNC_EDGE = ["rising", "falling"];
 DEC_ROUNDING = [0, 2, 2]; % Indexed by elements of BLOCK
 
-TRIAL_AMPLITUDE_SCALING = 120;
+TRIAL_AMPLITUDE_SCALING = 120; % microvolts, this should roughly correspond to the largest expected deviations so that trials fit nicely with most values scaled between ~-0.5 to 0.5, with outliers maybe going as large as -1.0 to 1.0.
+
 PLOT_HEADSTAGE_MOVEMENT = true;
 N_EXAMPLE_TRIALS = 10;   % How many trials to plot, per frequency block?
         
