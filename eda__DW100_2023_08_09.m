@@ -56,7 +56,7 @@ for iCh = 1:32
                  'Name',sprintf('Amplifier Channel A%03d EDA', iCh-1), ...
                  'Position', [200 100 500 600]);
     L = tiledlayout(fig, 2, 1);
-    title(L, sprintf('Channel-A%03d EDA', iCh), 'FontName','Tahoma','Color','k');
+    title(L, sprintf('Channel-A%03d EDA', iCh-1), 'FontName','Tahoma','Color','k');
     xlabel(L, 'Time (s)', 'FontName','Tahoma','Color','k');
     ax = nexttile(L);
     set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
