@@ -21,8 +21,10 @@ DD = 9;
 BLOCK_NAME = sprintf("%s_%04d_%02d_%02d_%d", SUBJ, YYYY, MM, DD, BLOCK);
 OUT_FOLDER = fullfile(pwd, 'figures', BLOCK_NAME);
 
+N_EXAMPLE_TRIALS = 4;   % How many trials to plot, per frequency block?
 N_DECIMAL_ROUNDING = 1; % For block-1 use 0, all others use 2 (for categorical grouping of sync pulses based on estimated frequency of stimuli)
-SYNC_EDGE = 'rising'; % 'rising' | 'falling' | 'both'
+SYNC_EDGE = 'rising';   % 'rising' | 'falling' | 'both'
+TRIAL_AMPLITUDE_SCALING = 120;
 
 %% Load data (see comment below first!)
 % Need to have raptor datashare (\\raptor.ni.cmu.edu\NML) mapped -- see the
@@ -43,59 +45,65 @@ end
 % Get sync array
 [i_sync, g_sync, id_sync] = parse_edges(x.board_dig_in_data(4,:), SYNC_EDGE, ...
     'NDecimalPointsRound', N_DECIMAL_ROUNDING);
-cdata = turbo(max(g_sync));
+n_groups = max(g_sync);
+cdata = turbo(n_groups);
 vec = (-60:450)'; % -2 : +15 ms
 t_snips = 1e3 .* vec ./ fs;
 mask = i_sync + vec;
 mask(:, any(mask < 1, 1) | any(mask > numel(t), 1)) = []; % Remove out-of-bounds samples
 [b,a] = butter(4, [300 3000]./(fs/2), 'bandpass');
 
+
+i_sample = cell(n_groups,1);
+for ii = 1:n_groups
+    tmp = find(g_sync == ii);
+    i_sample{ii} = tmp(1:min(numel(tmp), N_EXAMPLE_TRIALS));
+end
+i_sample = horzcat(i_sample{:});
+k = numel(i_sample);
+
+%% Plot the one example figure for the full block
+fig = figure('Color','w', ...
+             'Name',sprintf('Amplifier Channel A%03d EDA', 23), ...
+             'Position', [200 100 500 600]);
+L = tiledlayout(fig, 2, 1);
+title(L, sprintf('Channel-A%03d EDA', 23), 'FontName','Tahoma','Color','k');
+xlabel(L, 'Time (s)', 'FontName','Tahoma','Color','k');
+ax = nexttile(L);
+set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+plot(ax, t, x.amplifier_data(24,:), 'b-', ...           % Plot channel data
+         t, x.board_dig_in_data(4,:)*50 + 300, 'k-');   % Offset DIG-SYNC
+title(ax, 'Amplifier and Sync Data', 'FontName','Tahoma','Color','k');
+ylabel(ax, 'DRG Amplitude (\muV)', 'FontName','Tahoma','Color','k');
+
+ax = nexttile(L);
+yyaxis(ax, 'left');
+set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k', 'ColorOrder', [1 0 0; 0 1 0; 0 0 1], 'LineStyleOrder', {'-'});
+plot(ax, x.t_aux_input, acc);
+ylabel(ax, 'Headstage Acceleration (g)', 'FontName','Tahoma','Color','k');
+
+yyaxis(ax, 'right');
+set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k', 'ColorOrder', [1 0 0; 0 1 0; 0 0 1], 'LineStyleOrder', {'--'});
+plot(ax, x.t_aux_input, p);
+title(ax, 'Headstage Movement', 'FontName','Tahoma','Color','k');
+ylabel(ax, '(\intAcceleration)', 'FontName','Tahoma','Color','k');
+legend(ax, ["a_x", "a_y", "a_z", "\inta_x", "\inta_y", "\inta_z"], 'FontName','Tahoma');
+
+default.savefig(fullfile(OUT_FOLDER, sprintf('Channel-A-%03d_All', 23)));
+
 %% Plot figures for each channel
-for iCh = 1:32
-    fig = figure('Color','w', ...
-                 'Name',sprintf('Amplifier Channel A%03d EDA', iCh-1), ...
-                 'Position', [200 100 500 600]);
-    L = tiledlayout(fig, 2, 1);
-    title(L, sprintf('Channel-A%03d EDA', iCh-1), 'FontName','Tahoma','Color','k');
-    xlabel(L, 'Time (s)', 'FontName','Tahoma','Color','k');
-    ax = nexttile(L);
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
-    plot(ax, t, x.amplifier_data(iCh,:), 'b-', ...           % Plot channel data
-             t, x.board_dig_in_data(4,:)*50 + 300, 'k-');   % Offset DIG-SYNC
-    title(ax, 'Amplifier and Sync Data', 'FontName','Tahoma','Color','k');
-    ylabel(ax, 'DRG Amplitude (\muV)', 'FontName','Tahoma','Color','k');
-    
-    ax = nexttile(L);
-    yyaxis(ax, 'left');
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k', 'ColorOrder', [1 0 0; 0 1 0; 0 0 1], 'LineStyleOrder', {'-'});
-    plot(ax, x.t_aux_input, acc);
-    ylabel(ax, 'Headstage Acceleration (g)', 'FontName','Tahoma','Color','k');
-    
-    yyaxis(ax, 'right');
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k', 'ColorOrder', [1 0 0; 0 1 0; 0 0 1], 'LineStyleOrder', {'--'});
-    plot(ax, x.t_aux_input, p);
-    title(ax, 'Headstage Movement', 'FontName','Tahoma','Color','k');
-    ylabel(ax, '(\intAcceleration)', 'FontName','Tahoma','Color','k');
-    legend(ax, ["a_x", "a_y", "a_z", "\inta_x", "\inta_y", "\inta_z"], 'FontName','Tahoma');
-    
-    default.savefig(fullfile(OUT_FOLDER, sprintf('Channel-A-%03d_All', iCh-1)));
-    
+for iCh = 1:32    
     % Identify sync events
     y = x.amplifier_data(iCh,:);
     yf = filtfilt(b,a,y);
-    snips = yf(mask);
-    n = size(snips, 2);
-    k = min(100, size(snips,2));
-    
-    i_sample = randsample(n, k, false);
-    i_sample = sort(i_sample, 'ascend');
+    snips = yf(mask);      
     
     fig = figure('Color', 'w', 'Name', 'Rising Edge Snippets');
     L = tiledlayout(fig, 2, 1);
     ax = nexttile(L, 1, [2 1]);
     set(ax,'NextPlot','add','FontName','Tahoma', 'ColorOrder', cdata(g_sync(i_sample), :), ...
-        'XLim', [t_snips(1), t_snips(end)], 'YLim',[0, k]);
-    plot(ax, t_snips, snips(:,i_sample)./120+(1:k));
+        'XLim', [t_snips(1), t_snips(end)], 'YLim',[0, k+1]);
+    plot(ax, t_snips, snips(:,i_sample)./TRIAL_AMPLITUDE_SCALING+(1:k));
     ylabel(ax, 'Rising Edge Number', 'FontName','Tahoma',"Color",'k');
     xlabel(ax, 'Time From Rising Edge (ms)', 'FontName','Tahoma',"Color",'k');
     
