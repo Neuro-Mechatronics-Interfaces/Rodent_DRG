@@ -267,26 +267,29 @@ end
 save(fullfile(out_folder, sprintf('%s_clu.mat', tank)), 'data_blanked', 'clu', '-v7.3');
 
 %% Look at the spike time correlograms for all the units.
-XC_VEC = -100:100; % ms
+XC_VEC = -10:0.1:10; % ms
+N_MIN_SPIKES = 200; 
+
 tau_xc = XC_VEC(2:end) - 0.5.*mean(diff(XC_VEC));
-comparison = nchoosek(1:numel(clu),2);
+i_sel = find(cellfun(@numel,{clu.idx}) > N_MIN_SPIKES);
+comparison = nchoosek(1:numel(i_sel),2);
 
 nc = size(comparison,1);
 xc = struct('comparison',mat2cell(comparison,ones(nc,1),2),'rho',cell(size(comparison,1),1));
-isi = zeros(numel(clu),numel(tau_xc));
+isi = zeros(numel(i_sel),numel(tau_xc));
 
 ix = 0;
 fprintf(1,'Please waiting, computing isi & cross-correlations...000%%\n');
-for ii = 1:(numel(clu)-1)
-    ts_ii = 1e3 .* clu(ii).idx ./ fs; % ms
+for ii = 1:(numel(i_sel)-1)
+    ts_ii = 1e3 .* clu(i_sel(ii)).idx ./ fs; % ms
     for ik = 1:numel(ts_ii)
         isi(ii,:) = isi(ii,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
     end
     isi(ii,:) = isi(ii,:) ./ numel(ts_ii);
 
-    for ij = (ii+1):numel(clu)
+    for ij = (ii+1):numel(i_sel)
         ix = ix + 1;
-        ts_ij = 1e3 .* clu(ij).idx ./ fs; % ms
+        ts_ij = 1e3 .* clu(i_sel(ij)).idx ./ fs; % ms
         xc(ix).rho = zeros(1,numel(tau_xc));
         for ik = 1:numel(ts_ii)
             xc(ix).rho = xc(ix).rho + histcounts(ts_ij - ts_ii(ik), XC_VEC);
@@ -295,7 +298,7 @@ for ii = 1:(numel(clu)-1)
         fprintf(1,'\b\b\b\b\b%03d%%\n', round(100 * ix/nc));
     end
 end
-ts_ii = 1e3 .* clu(end).idx ./ fs; % ms
+ts_ii = 1e3 .* clu(i_sel(end)).idx ./ fs; % ms
 for ik = 1:numel(ts_ii)
     isi(end,:) = isi(end,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
 end
@@ -311,7 +314,7 @@ t_template = linspace(-0.4,0.8,37);
 for ii = 1:size(isi,1)
     fig = figure('Color','w','Name','ISI','Position',[371   558   870   420]);
     L = tiledlayout(fig, 1, 2);
-    name = sprintf('Unit-%02d--PC-%02d',clu(ii).id,clu(ii).pc);
+    name = sprintf('Unit-%02d--PC-%02d',clu(i_sel(ii)).id,clu(i_sel(ii)).pc);
     title(L, name,'FontName','Tahoma','Color','k');
     ax = nexttile(L,1,[1 1]);
     set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
@@ -322,9 +325,9 @@ for ii = 1:size(isi,1)
 
     ax = nexttile(L,2,[1 1]);
     set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
-    errorbar(ax,  t_template, clu(ii).mean, clu(ii).var);
+    errorbar(ax,  t_template, clu(i_sel(ii)).mean, clu(i_sel(ii)).var);
     xlabel(ax,'Time (ms)', 'FontName','Tahoma','Color','k');
-    ylabel(ax,sprintf('PC-%02d: Score', clu(ii).pc), 'FontName','Tahoma','Color','k');
+    ylabel(ax,sprintf('PC-%02d: Score', clu(i_sel(ii)).pc), 'FontName','Tahoma','Color','k');
     title(ax, 'Template','FontName','Tahoma','Color','k');
     default.savefig(fig,fullfile(out_folder, sprintf('%s_ISI',name)));
 end
@@ -337,30 +340,15 @@ end
 
 t_template = linspace(-0.4,0.8,37);
 for ii = 1:numel(xc)
-    fig = figure('Color','w','Name','Correlogram','Position',[371   558   870   420]);
-    L = tiledlayout(fig, 2, 2);
     name = sprintf('Unit-%02d--PC-%02d-Unit-%02d--PC-%02d',clu(xc(ii).comparison(1)).id,clu(xc(ii).comparison(1)).pc,clu(xc(ii).comparison(2)).id,clu(xc(ii).comparison(2)).pc);
-    title(L, name,'FontName','Tahoma','Color','k');
-    ax = nexttile(L,1,[2 1]);
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
-    bar(ax, tau_xc, xc(ii).rho, 1, 'EdgeColor','none','FaceColor','b');
-    xlabel(ax,'Time (ms)', 'FontName','Tahoma','Color','k');
-    ylabel(ax,'Counts / Spike', 'FontName','Tahoma','Color','k');
-    title(ax,'Correlogram', 'FontName','Tahoma','Color','k');
-
-    ax = nexttile(L,2,[1 1]);
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
-    errorbar(ax,  t_template, clu(xc(ii).comparison(1)).mean, clu(xc(ii).comparison(1)).var);
-    xlabel(ax,'Time (ms)', 'FontName','Tahoma','Color','k');
-    ylabel(ax,sprintf('PC-%02d: Score', clu(xc(ii).comparison(1)).pc), 'FontName','Tahoma','Color','k');
-    title(ax, sprintf('Template_i (%d)', xc(ii).comparison(1)),'FontName','Tahoma','Color','k');
-
-    ax = nexttile(L,4,[1 1]);
-    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
-    errorbar(ax,  t_template, clu(xc(ii).comparison(2)).mean, clu(xc(ii).comparison(2)).var);
-    xlabel(ax,'Time (ms)', 'FontName','Tahoma','Color','k');
-    ylabel(ax,sprintf('PC-%02d: Score', clu(xc(ii).comparison(2)).pc), 'FontName','Tahoma','Color','k');
-    title(ax, sprintf('Template_j (%d)', xc(ii).comparison(2)),'FontName','Tahoma','Color','k');
+    fig = plot_correlogram( ...
+        tau_xc, xc(ii).rho, ...
+        'Name', name, ...
+        'TemplateTime', t_template, ...
+        'TemplateI', clu(xc(ii).comparison(1)), ...
+        'TemplateIName', sprintf('Template_i (%d)', xc(ii).comparison(1)), ...
+        'TemplateJ', clu(xc(ii).comparison(2)), ...
+        'TemplateJName', sprintf('Template_j (%d)', xc(ii).comparison(2)));
     default.savefig(fig,fullfile(out_folder, sprintf('%s_Correlogram',name)));
 end
 
@@ -378,3 +366,429 @@ if exist(out_folder,'dir')==0
     mkdir(out_folder);
 end
 default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_PC-01_PC-02_PC-04_combined_Structure', tank, TEMPLATE_BLOCK)));
+
+%% Let's get the sync events for this block
+[i_sync, g_sync, id_sync, freq_est] = parse_edges(x.board_dig_in_data(4,:), 'rising', 'StimMode', 1);
+t_sync = i_sync ./ x.frequency_parameters.board_dig_in_sample_rate;
+ug = unique(g_sync);
+c_freq_group = turbo(24);
+ich_ex = 16;
+
+fig = figure('Color','w', ...
+             'Name','Sync and Example Channel', ...
+             'Position', [200 100 500 600]); 
+L = tiledlayout(fig, 2, 1);
+title(L, 'Sync and Example Channel', 'FontName','Tahoma','Color','k');
+xlabel(L, 'Time (s)', 'FontName','Tahoma','Color','k');
+
+ax = gobjects(2,1);
+ax(1) = nexttile(L, 1, [1 1]);
+set(ax(1),'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k', ...
+    'YTick', [0 1], 'YTickLabel', ["LOW", "HIGH"], 'YLim', [-0.1, 1.1]);
+plot(ax(1), x.t_dig, x.board_dig_in_data(4,:), 'Color', 'k', 'LineWidth', 1.25); 
+title(ax(1), 'TTL Samples', 'FontName','Tahoma','Color','k');
+ylabel(ax(1), 'Logical State', 'FontName','Tahoma','Color','k');
+
+
+ax(2) = nexttile(L, 2, [1 1]);
+set(ax(2),'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+plot(ax(2), x.t_amplifier, filtfilt(spike_band.b,spike_band.a,x.amplifier_data(ich_ex,:)), 'Color', c_order(ich_ex,:), 'LineWidth', 1.25); 
+for ii = 1:numel(ug)
+    xline(ax(2), x.t_dig(i_sync(g_sync == ug(ii))), 'Color', c_freq_group(ug(ii),:), 'LineWidth', 1.25, 'Label', sprintf('%d-Hz', id_sync(ug(ii))));
+end
+title(ax(2), 'Amplifier Samples', 'FontName','Tahoma','Color','k');
+subtitle(ax(2), sprintf('(A-%03d)', ich_ex-1),'FontName','Tahoma','Color',[0.65 0.65 0.65]);
+ylabel(ax(2), 'DRG Amplitude (\muV)', 'FontName','Tahoma','Color','k');
+linkaxes(ax, 'x');
+
+xlim(ax, [10, 12]);
+
+
+%% Let's get only the "positive spike" events for each PC this time.
+% Look at the full dataset.
+x = io.load_data(SUBJ, YYYY, MM, DD, "*", TEMPLATE_BLOCK, '.rhd', RAW_DATA_FOLDER);
+data_f = filtfilt(spike_band.b, spike_band.a, x.amplifier_data(1:32,:)')';
+data_f(ch_exclude,:) = 0;
+t = x.t_amplifier;
+
+%% Get the principal components
+% score = data_f' * spike_d.coeff;
+warning('off','stats:pca:ColRankDefX'); % We expect this warning due to the blanking step.
+[coeff,score,~,~,explained] = pca(data_f','Algorithm','eig');
+warning('on','stats:pca:ColRankDefX'); % We expect this warning due to the blanking step.
+
+%% Count spikes
+full_spk_ts = cell(9,1);
+c_spk = jet(9);
+for ii = 1:9
+    [~,full_spk_ts{ii}] = findpeaks(score(:,ii),t,'MinPeakHeight',3.5.*median(abs(score(:,ii))));
+end
+
+%% Histogram counts for rising-edge events.
+[i_sync, g_sync, id_sync, freq_est] = parse_edges(x.board_dig_in_data(4,:), 'rising', 'StimMode', 1);
+ug = unique(g_sync);
+c_freq_group = turbo(24);
+t_sync = i_sync ./ x.frequency_parameters.board_dig_in_sample_rate;
+XC_VEC_EVT = 0:50;
+tau_xc_evt = XC_VEC_EVT(2:end) + (mean(diff(XC_VEC_EVT))/2);
+rho_spk_ts = struct;
+rho_spk_ts.all = zeros(numel(full_spk_ts),numel(tau_xc_evt));
+rho_spk_ts.grouped = zeros(numel(full_spk_ts),numel(tau_xc_evt),numel(ug));
+for ii = 1:numel(full_spk_ts)
+    for ik = 1:numel(t_sync)
+        hvec = histcounts((full_spk_ts{ii} - t_sync(ik)).*1e3, XC_VEC_EVT);
+        rho_spk_ts.all(ii,:) = rho_spk_ts.all(ii,:) + hvec;
+        rho_spk_ts.grouped(ii,:,g_sync(ik)) = rho_spk_ts.grouped(ii,:,g_sync(ik)) + hvec ./ sum(g_sync == g_sync(ik));
+    end
+end
+rho_spk_ts.all = rho_spk_ts.all ./ numel(t_sync);
+
+%% Plot PETHs for rising-edge events.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'PETH', sprintf('%dms-to-%dms', XC_VEC_EVT(1),XC_VEC_EVT(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+fig = figure('Color','w', ...
+             'Name','Rising Edge Correlations', ...
+             'Position', [200 100 500 600]); 
+L = tiledlayout(fig,3,3);
+for ii = 1:numel(full_spk_ts)
+    ax = nexttile(L);
+    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+    bar(ax, tau_xc_evt, rho_spk_ts.all(ii,:),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+    title(ax,sprintf('PC-%d:Rising',ii),'FontName','Tahoma',"Color",'k');
+    ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+    xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+end
+title(L, 'ALL Stimuli', 'FontName','Tahoma','Color','k');
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Rising-Edge-ALL',tank,TEMPLATE_BLOCK)));
+
+for ig = 1:numel(ug)
+    fig = figure('Color','w', ...
+                 'Name','Rising Edge Correlations', ...
+                 'Position', [200 100 500 600]); 
+    L = tiledlayout(fig,3,3);
+    for ii = 1:numel(full_spk_ts)
+        ax = nexttile(L);
+        set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k','YLim',[0 1]);
+        bar(ax, tau_xc_evt, rho_spk_ts.grouped(ii,:,ig),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+        title(ax,sprintf('PC-%d:Rising',ii),'FontName','Tahoma',"Color",'k');
+        ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+        xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+    end
+    title(L, sprintf('%d-Hz Stimulus', id_sync(ug(ig))), 'FontName','Tahoma','Color',c_freq_group(ig,:));
+    default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Rising-Edge-%d-Hz',tank,TEMPLATE_BLOCK,id_sync(ug(ig)))));
+end
+
+%% Do same, but for falling-edge.
+i_sync_falling = parse_edges(x.board_dig_in_data(4,:), 'falling', 'StimMode', 1);
+t_sync_falling = i_sync_falling / x.frequency_parameters.board_dig_in_sample_rate;
+XC_VEC_EVT = 0:50;
+tau_xc_evt = XC_VEC_EVT(2:end) + (mean(diff(XC_VEC_EVT))/2);
+rho_spk_ts = struct;
+rho_spk_ts.all = zeros(numel(full_spk_ts),numel(tau_xc_evt));
+rho_spk_ts.grouped = zeros(numel(full_spk_ts),numel(tau_xc_evt),numel(ug));
+for ii = 1:numel(full_spk_ts)
+    for ik = 1:numel(t_sync_falling)
+        hvec = histcounts((full_spk_ts{ii} - t_sync_falling(ik)).*1e3, XC_VEC_EVT);
+        rho_spk_ts.all(ii,:) = rho_spk_ts.all(ii,:) + hvec;
+        rho_spk_ts.grouped(ii,:,g_sync(ik)) = rho_spk_ts.grouped(ii,:,g_sync(ik)) + hvec ./ sum(g_sync == g_sync(ik));
+    end
+end
+rho_spk_ts.all = rho_spk_ts.all ./ numel(t_sync_falling);
+
+%% Same, make PETH for falling-edge events.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'PETH', sprintf('%dms-to-%dms', XC_VEC_EVT(1),XC_VEC_EVT(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+fig = figure('Color','w', ...
+             'Name','Falling Edge Correlations', ...
+             'Position', [200 100 500 600]); 
+L = tiledlayout(fig,3,3);
+for ii = 1:size(rho_spk_ts.all,1)
+    ax = nexttile(L);
+    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+    bar(ax, tau_xc_evt, rho_spk_ts.all(ii,:),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+    title(ax,sprintf('PC-%d:Falling',ii),'FontName','Tahoma',"Color",'k');
+    ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+    xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+end
+title(L, 'ALL Stimuli', 'FontName','Tahoma','Color','k');
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Falling-Edge-ALL',tank,TEMPLATE_BLOCK)));
+
+for ig = 1:numel(ug)
+    fig = figure('Color','w', ...
+                 'Name','Falling Edge Correlations', ...
+                 'Position', [200 100 500 600]); 
+    L = tiledlayout(fig,3,3);
+    for ii = 1:size(rho_spk_ts.grouped,1)
+        ax = nexttile(L);
+        set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k','YLim',[0 1]);
+        bar(ax, tau_xc_evt, rho_spk_ts.grouped(ii,:,ig),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+        title(ax,sprintf('PC-%d:Falling',ii),'FontName','Tahoma',"Color",'k');
+        ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+        xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+    end
+    title(L, sprintf('%d-Hz Stimulus', id_sync(ug(ig))), 'FontName','Tahoma','Color',c_freq_group(ig,:));
+    default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Falling-Edge-%d-Hz',tank,TEMPLATE_BLOCK, id_sync(ug(ig)))));
+end
+
+%% Plot out the structure of these coefficients
+fig = figure('Color','w','Name','Coefficients Structure');
+ax = axes(fig,'NextPlot','add','YDir','reverse','YTick',[250, 500, 750], ...
+    'XLim',[0.5,9.5],...
+    'YLim',[min(depth_NN)-10,max(depth_NN)+10],...
+    'FontName','Tahoma','CLim',[-0.5, 0.5]);
+xlabel(ax,'Eigenvector Index','FontName','Tahoma','Color','k');
+ylabel(ax,'Depth (\mum)','FontName','Tahoma','Color','k');
+cdata = coeff(i_intan,1:9);
+imagesc(ax,1:9,depth_NN,cdata);
+colorbar(ax);
+
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Full-PC-Coefficients', tank, TEMPLATE_BLOCK)));
+
+
+%% Calculate cross-correlation functions for the detected units.
+XC_VEC = -10:0.1:10; % ms
+N_MIN_SPIKES = 200; 
+
+tau_xc = XC_VEC(2:end) - 0.5.*mean(diff(XC_VEC));
+i_sel = find(cellfun(@numel,full_spk_ts) > N_MIN_SPIKES);
+comparison = nchoosek(1:numel(i_sel),2);
+
+nc = size(comparison,1);
+xc_full = struct('comparison',mat2cell(comparison,ones(nc,1),2),'rho',cell(size(comparison,1),1));
+isi_full = zeros(numel(i_sel),numel(tau_xc));
+
+ix = 0;
+fprintf(1,'Please wait, computing isi & cross-correlations...000%%\n');
+for ii = 1:(numel(i_sel)-1)
+    ts_ii = full_spk_ts{i_sel(ii)}.*1e3;
+    for ik = 1:numel(ts_ii)
+        isi_full(ii,:) = isi_full(ii,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
+    end
+    isi_full(ii,:) = isi_full(ii,:) ./ numel(ts_ii);
+
+    for ij = (ii+1):numel(i_sel)
+        ix = ix + 1;
+        ts_ij = 1e3 .* full_spk_ts{i_sel(ij)}; % ms
+        xc_full(ix).rho = zeros(1,numel(tau_xc));
+        for ik = 1:numel(ts_ii)
+            xc_full(ix).rho = xc_full(ix).rho + histcounts(ts_ij - ts_ii(ik), XC_VEC);
+        end
+        xc_full(ix).rho = xc_full(ix).rho ./ numel(ts_ii);
+        fprintf(1,'\b\b\b\b\b%03d%%\n', round(100 * ix/nc));
+    end
+end
+ts_ii = full_spk_ts{i_sel(end)}.*1e3;
+for ik = 1:numel(ts_ii)
+    isi_full(end,:) = isi_full(end,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
+end
+isi_full(end,:) = isi_full(end,:) ./ numel(ts_ii);
+
+%% Generate Correlogram Plots for detected units from Block 2.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'Full-Correlograms',sprintf('%dms-to-%dms',XC_VEC(1),XC_VEC(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+for ii = 1:size(comparison,1)
+    name = sprintf('%s_%d_PC-%02d-to-PC-%02d',tank,TEMPLATE_BLOCK,comparison(ii,1),comparison(ii,2));
+    fig = plot_correlogram( ...
+        tau_xc, xc_full(ii).rho, 'Name', strrep(name,'_','\_'));
+    default.savefig(fig,fullfile(out_folder, sprintf('%s_Correlogram',name)));
+end
+
+%% Repeat this for the next block
+block = TEMPLATE_BLOCK+1;
+x = io.load_data(SUBJ, YYYY, MM, DD, "*", block, '.rhd', RAW_DATA_FOLDER);
+data_f = filtfilt(spike_band.b, spike_band.a, x.amplifier_data(1:32,:)')';
+data_f(ch_exclude,:) = 0;
+t = x.t_amplifier;
+% warning('off','stats:pca:ColRankDefX'); % We expect this warning due to the blanking step.
+% [coeff,score,~,~,explained] = pca(data_f','Algorithm','eig');
+% warning('on','stats:pca:ColRankDefX'); % We expect this warning due to the blanking step.
+score = data_f' * coeff;
+
+%% Count spikes
+full_spk_ts = cell(9,1);
+c_spk = jet(9);
+for ii = 1:9
+    [~,full_spk_ts{ii}] = findpeaks(score(:,ii),t,'MinPeakHeight',3.5.*median(abs(score(:,ii))));
+end
+
+%% Histogram counts for rising-edge events.
+[i_sync, g_sync, id_sync, freq_est] = parse_edges(x.board_dig_in_data(4,:), 'rising', 'StimMode', 3);
+ug = unique(g_sync);
+c_freq_group = turbo(numel(ug));
+
+t_sync = i_sync ./ x.frequency_parameters.board_dig_in_sample_rate;
+XC_VEC_EVT = 0:50;
+tau_xc_evt = XC_VEC_EVT(2:end) + (mean(diff(XC_VEC_EVT))/2);
+rho_spk_ts = struct;
+rho_spk_ts.all = zeros(numel(full_spk_ts),numel(tau_xc_evt));
+rho_spk_ts.grouped = zeros(numel(full_spk_ts),numel(tau_xc_evt),numel(ug));
+for ii = 1:numel(full_spk_ts)
+    for ik = 1:numel(t_sync)
+        hvec = histcounts((full_spk_ts{ii} - t_sync(ik)).*1e3, XC_VEC_EVT);
+        rho_spk_ts.all(ii,:) = rho_spk_ts.all(ii,:) + hvec;
+        rho_spk_ts.grouped(ii,:,g_sync(ik)) = rho_spk_ts.grouped(ii,:,g_sync(ik)) + hvec ./ sum(g_sync == g_sync(ik));
+    end
+end
+rho_spk_ts.all = rho_spk_ts.all ./ numel(t_sync);
+
+%% Plot PETHs for rising-edge events.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'PETH', sprintf('%dms-to-%dms', XC_VEC_EVT(1),XC_VEC_EVT(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+fig = figure('Color','w', ...
+             'Name','Rising Edge Correlations', ...
+             'Position', [200 100 500 600]); 
+L = tiledlayout(fig,3,3);
+for ii = 1:numel(full_spk_ts)
+    ax = nexttile(L);
+    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+    bar(ax, tau_xc_evt, rho_spk_ts.all(ii,:),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+    title(ax,sprintf('PC-%d:Rising',ii),'FontName','Tahoma',"Color",'k');
+    ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+    xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+end
+title(L, 'ALL Stimuli', 'FontName','Tahoma','Color','k');
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Rising-Edge-ALL',tank,block)));
+
+for ig = 1:numel(ug)
+    fig = figure('Color','w', ...
+                 'Name','Rising Edge Correlations', ...
+                 'Position', [200 100 500 600]); 
+    L = tiledlayout(fig,3,3);
+    for ii = 1:numel(full_spk_ts)
+        ax = nexttile(L);
+        set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k','YLim',[0 1]);
+        bar(ax, tau_xc_evt, rho_spk_ts.grouped(ii,:,ig),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+        title(ax,sprintf('PC-%d:Rising',ii),'FontName','Tahoma',"Color",'k');
+        ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+        xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+    end
+    title(L, sprintf('%d-Hz Stimulus', id_sync(ug(ig))), 'FontName','Tahoma','Color',c_freq_group(ig,:));
+    default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Rising-Edge-%d-Hz',tank,block,id_sync(ug(ig)))));
+end
+
+%% Do same, but for falling-edge.
+i_sync_falling = parse_edges(x.board_dig_in_data(4,:), 'falling', 'StimMode', 3);
+t_sync_falling = i_sync_falling / x.frequency_parameters.board_dig_in_sample_rate;
+XC_VEC_EVT = 0:50;
+tau_xc_evt = XC_VEC_EVT(2:end) + (mean(diff(XC_VEC_EVT))/2);
+rho_spk_ts = struct;
+rho_spk_ts.all = zeros(numel(full_spk_ts),numel(tau_xc_evt));
+rho_spk_ts.grouped = zeros(numel(full_spk_ts),numel(tau_xc_evt),numel(ug));
+for ii = 1:numel(full_spk_ts)
+    for ik = 1:numel(t_sync_falling)
+        hvec = histcounts((full_spk_ts{ii} - t_sync_falling(ik)).*1e3, XC_VEC_EVT);
+        rho_spk_ts.all(ii,:) = rho_spk_ts.all(ii,:) + hvec;
+        rho_spk_ts.grouped(ii,:,g_sync(ik)) = rho_spk_ts.grouped(ii,:,g_sync(ik)) + hvec ./ sum(g_sync == g_sync(ik));
+    end
+end
+rho_spk_ts.all = rho_spk_ts.all ./ numel(t_sync_falling);
+
+%% Same, make PETH for falling-edge events.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'PETH', sprintf('%dms-to-%dms', XC_VEC_EVT(1),XC_VEC_EVT(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+fig = figure('Color','w', ...
+             'Name','Falling Edge Correlations', ...
+             'Position', [200 100 500 600]); 
+L = tiledlayout(fig,3,3);
+for ii = 1:size(rho_spk_ts.all,1)
+    ax = nexttile(L);
+    set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k');
+    bar(ax, tau_xc_evt, rho_spk_ts.all(ii,:),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+    title(ax,sprintf('PC-%d:Falling',ii),'FontName','Tahoma',"Color",'k');
+    ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+    xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+end
+title(L, 'ALL Stimuli', 'FontName','Tahoma','Color','k');
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Falling-Edge-ALL',tank,block)));
+
+for ig = 1:numel(ug)
+    fig = figure('Color','w', ...
+                 'Name','Falling Edge Correlations', ...
+                 'Position', [200 100 500 600]); 
+    L = tiledlayout(fig,3,3);
+    for ii = 1:size(rho_spk_ts.grouped,1)
+        ax = nexttile(L);
+        set(ax,'NextPlot','add','FontName','Tahoma','XColor','k','YColor','k','YLim',[0 1]);
+        bar(ax, tau_xc_evt, rho_spk_ts.grouped(ii,:,ig),1,'EdgeColor','none','FaceColor',c_spk(ii,:));
+        title(ax,sprintf('PC-%d:Falling',ii),'FontName','Tahoma',"Color",'k');
+        ylabel(ax,'Spikes/Event','Color','k','FontName','Tahoma');
+        xlabel(ax,'Time Lag (ms)','FontName','Tahoma','Color','k');
+    end
+    title(L, sprintf('%d-Hz Stimulus', id_sync(ug(ig))), 'FontName','Tahoma','Color',c_freq_group(ig,:));
+    default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Falling-Edge-%d-Hz',tank,block, id_sync(ug(ig)))));
+end
+
+%% Plot out the structure of these coefficients
+fig = figure('Color','w','Name','Coefficients Structure');
+ax = axes(fig,'NextPlot','add','YDir','reverse','YTick',[250, 500, 750], ...
+    'XLim',[0.5,9.5],...
+    'YLim',[min(depth_NN)-10,max(depth_NN)+10],...
+    'FontName','Tahoma','CLim',[-0.5, 0.5]);
+xlabel(ax,'Eigenvector Index','FontName','Tahoma','Color','k');
+ylabel(ax,'Depth (\mum)','FontName','Tahoma','Color','k');
+cdata = coeff(i_intan,1:9);
+imagesc(ax,1:9,depth_NN,cdata);
+colorbar(ax);
+
+default.savefig(fig, fullfile(out_folder, sprintf('%s_%d_Full-PC-Coefficients', tank, block)));
+
+
+%% Calculate cross-correlation functions for the detected units.
+XC_VEC = -10:0.1:10; % ms
+N_MIN_SPIKES = 200; 
+
+tau_xc = XC_VEC(2:end) - 0.5.*mean(diff(XC_VEC));
+i_sel = find(cellfun(@numel,full_spk_ts) > N_MIN_SPIKES);
+comparison = nchoosek(1:numel(i_sel),2);
+
+nc = size(comparison,1);
+xc_full = struct('comparison',mat2cell(comparison,ones(nc,1),2),'rho',cell(size(comparison,1),1));
+isi_full = zeros(numel(i_sel),numel(tau_xc));
+
+ix = 0;
+fprintf(1,'Please wait, computing isi & cross-correlations...000%%\n');
+for ii = 1:(numel(i_sel)-1)
+    ts_ii = full_spk_ts{i_sel(ii)}.*1e3;
+    for ik = 1:numel(ts_ii)
+        isi_full(ii,:) = isi_full(ii,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
+    end
+    isi_full(ii,:) = isi_full(ii,:) ./ numel(ts_ii);
+
+    for ij = (ii+1):numel(i_sel)
+        ix = ix + 1;
+        ts_ij = 1e3 .* full_spk_ts{i_sel(ij)}; % ms
+        xc_full(ix).rho = zeros(1,numel(tau_xc));
+        for ik = 1:numel(ts_ii)
+            xc_full(ix).rho = xc_full(ix).rho + histcounts(ts_ij - ts_ii(ik), XC_VEC);
+        end
+        xc_full(ix).rho = xc_full(ix).rho ./ numel(ts_ii);
+        fprintf(1,'\b\b\b\b\b%03d%%\n', round(100 * ix/nc));
+    end
+end
+ts_ii = full_spk_ts{i_sel(end)}.*1e3;
+for ik = 1:numel(ts_ii)
+    isi_full(end,:) = isi_full(end,:) + histcounts(setdiff(ts_ii,ts_ii(ik)) - ts_ii(ik), XC_VEC);
+end
+isi_full(end,:) = isi_full(end,:) ./ numel(ts_ii);
+
+%% Generate Correlogram Plots for detected units from Block 3.
+out_folder = fullfile(GEN_DATA_FOLDER, tank, 'Spike-Band PCA', 'Full-Correlograms',sprintf('%dms-to-%dms',XC_VEC(1),XC_VEC(end)));
+if exist(out_folder,'dir')==0
+    mkdir(out_folder);
+end
+for ii = 1:size(comparison,1)
+    name = sprintf('%s_%d_PC-%02d-to-PC-%02d',tank,block,comparison(ii,1),comparison(ii,2));
+    fig = plot_correlogram( ...
+        tau_xc, xc_full(ii).rho, 'Name', strrep(name,'_','\_'));
+    default.savefig(fig,fullfile(out_folder, sprintf('%s_Correlogram',name)));
+end

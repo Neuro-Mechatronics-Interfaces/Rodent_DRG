@@ -21,7 +21,7 @@ MM = 8;
 DD = 9;
 BLOCK = 1:3; % options for block
 SYNC_EDGE = ["rising", "falling"];
-DEC_ROUNDING = [0, 2, 2]; % Indexed by elements of BLOCK
+STIM_MODE = [0,1,3];
 
 TRIAL_AMPLITUDE_SCALING = 120; % microvolts, this should roughly correspond to the largest expected deviations so that trials fit nicely with most values scaled between ~-0.5 to 0.5, with outliers maybe going as large as -1.0 to 1.0.
 
@@ -32,7 +32,6 @@ for sync_edge = SYNC_EDGE
     for block = BLOCK
         block_name = sprintf("%s_%04d_%02d_%02d_%d", SUBJ, YYYY, MM, DD, block);
         out_folder = fullfile(pwd, 'figures', block_name, sync_edge);
-        n_decimal_rounding = DEC_ROUNDING(block); % For block-1 use 0, all others use 2 (for categorical grouping of sync pulses based on estimated frequency of stimuli)
 
         % Load data (see comment below first!)
         % Need to have raptor datashare (\\raptor.ni.cmu.edu\NML) mapped -- see the
@@ -52,7 +51,7 @@ for sync_edge = SYNC_EDGE
         
         % Get sync array
         [i_sync, g_sync, id_sync] = parse_edges(x.board_dig_in_data(4,:), sync_edge, ...
-            'NDecimalPointsRound', n_decimal_rounding);
+            'StimMode', STIM_MODE(block));
         n_groups = max(g_sync);
         cdata = turbo(n_groups);
         vec = (-round(N_MS_PRE_SYNC*0.001*fs):round(N_MS_POST_SYNC*0.001*fs))';
